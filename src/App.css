@@ -385,6 +385,59 @@ body {
   font-size: 1.05rem;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(59, 31, 31, 0.6);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.modal-card {
+  background: #fff;
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: var(--shadow);
+  max-width: 360px;
+  text-align: center;
+}
+
+.modal-title {
+  font-family: "DM Serif Display", serif;
+  font-size: 1.8rem;
+  margin-bottom: 10px;
+}
+
+.modal-text {
+  font-size: 1rem;
+  margin-bottom: 18px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.modal-btn {
+  border: none;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modal-cancel {
+  background: #fbe4e0;
+  color: var(--accent-deep);
+}
+
+.modal-confirm {
+  background: #ff6b63;
+  color: #fff;
+}
+
 .loader {
   position: fixed;
   inset: 0;

@@ -13,16 +13,20 @@ function getDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function getLastSevenDays() {
+function getLastWeekdays(count = 5) {
   const days = [];
-  const today = new Date();
-  for (let i = 6; i >= 0; i -= 1) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    days.push({
-      key: getDateKey(date),
-      label: new Intl.DateTimeFormat("uk-UA", { weekday: "short" }).format(date)
-    });
+  const cursor = new Date();
+  while (days.length < count) {
+    const dayOfWeek = cursor.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      days.unshift({
+        key: getDateKey(cursor),
+        label: new Intl.DateTimeFormat("uk-UA", { weekday: "short" }).format(
+          cursor
+        )
+      });
+    }
+    cursor.setDate(cursor.getDate() - 1);
   }
   return days;
 }
@@ -67,6 +71,7 @@ export default function App() {
   const [copyStatus, setCopyStatus] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState("");
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
     setPupils(loadPupils());
@@ -91,7 +96,7 @@ export default function App() {
     []
   );
 
-  const lastSevenDays = useMemo(() => getLastSevenDays(), []);
+  const lastWeekdays = useMemo(() => getLastWeekdays(), []);
   const todayKey = useMemo(() => getDateKey(), []);
 
   const visiblePupils = useMemo(() => {
@@ -122,6 +127,20 @@ export default function App() {
 
   function handleDelete(id) {
     setPupils((prev) => prev.filter((pupil) => pupil.id !== id));
+  }
+
+  function startDelete(pupil) {
+    setPendingDelete(pupil);
+  }
+
+  function confirmDelete() {
+    if (!pendingDelete) return;
+    handleDelete(pendingDelete.id);
+    setPendingDelete(null);
+  }
+
+  function cancelDelete() {
+    setPendingDelete(null);
   }
 
   function startEdit(pupil) {
@@ -272,11 +291,11 @@ export default function App() {
           </div>
         )}
         {visiblePupils.map((pupil) => {
-          const historyValues = lastSevenDays.map(
+          const historyValues = lastWeekdays.map(
             (day) => pupil.history?.[day.key] ?? 0
           );
           const points = buildSparklinePoints(historyValues);
-          const yesterdayKey = lastSevenDays[lastSevenDays.length - 2]?.key;
+          const yesterdayKey = lastWeekdays[lastWeekdays.length - 2]?.key;
           const todayValue = pupil.history?.[todayKey] ?? 0;
           const yesterdayValue = yesterdayKey
             ? pupil.history?.[yesterdayKey] ?? 0
@@ -320,7 +339,7 @@ export default function App() {
                   Зауваження: <strong>{pupil.warnings}</strong>
                 </div>
                 <div className="pupil-history">
-                  {lastSevenDays.map((day) => (
+                  {lastWeekdays.map((day) => (
                     <span className="history-chip" key={day.key}>
                       {day.label}: {pupil.history?.[day.key] ?? 0}
                     </span>
@@ -352,7 +371,7 @@ export default function App() {
                 <button
                   className="delete-btn"
                   type="button"
-                  onClick={() => handleDelete(pupil.id)}
+                  onClick={() => startDelete(pupil)}
                 >
                   Видалити
                 </button>
@@ -384,6 +403,26 @@ export default function App() {
           );
         })}
       </section>
+
+      {pendingDelete && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <div className="modal-title">Підтвердіть видалення</div>
+            <div className="modal-text">
+              Ви точно хочете видалити{" "}
+              <strong>{pendingDelete.name}</strong> з класу?
+            </div>
+            <div className="modal-actions">
+              <button className="modal-btn modal-cancel" onClick={cancelDelete}>
+                Скасувати
+              </button>
+              <button className="modal-btn modal-confirm" onClick={confirmDelete}>
+                Видалити
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="footer">
         Зірки нагороди для героїв без зауважень ⭐🧡⭐
