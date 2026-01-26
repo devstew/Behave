@@ -226,6 +226,45 @@ body {
   font-weight: 600;
 }
 
+.edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.edit-input {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 2px solid #f4b5ad;
+  font-size: 1rem;
+}
+
+.edit-save,
+.edit-cancel,
+.edit-btn {
+  border: none;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edit-save {
+  background: #ff6b63;
+  color: #fff;
+}
+
+.edit-cancel {
+  background: #fbe4e0;
+  color: var(--accent-deep);
+}
+
+.edit-btn {
+  background: #ffe0da;
+  color: var(--accent-deep);
+}
+
 .pupil-warnings strong {
   color: var(--accent-deep);
 }

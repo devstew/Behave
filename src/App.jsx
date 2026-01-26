@@ -50,6 +50,8 @@ export default function App() {
   const [sortMode, setSortMode] = useState("name");
   const [showWinnersOnly, setShowWinnersOnly] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editingName, setEditingName] = useState("");
 
   useEffect(() => {
     setPupils(loadPupils());
@@ -104,6 +106,27 @@ export default function App() {
 
   function handleDelete(id) {
     setPupils((prev) => prev.filter((pupil) => pupil.id !== id));
+  }
+
+  function startEdit(pupil) {
+    setEditingId(pupil.id);
+    setEditingName(pupil.name);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditingName("");
+  }
+
+  function saveEdit(id) {
+    const trimmed = editingName.trim();
+    if (!trimmed) return;
+    setPupils((prev) =>
+      prev.map((pupil) =>
+        pupil.id === id ? { ...pupil, name: trimmed } : pupil
+      )
+    );
+    cancelEdit();
   }
 
   function updateWarnings(id, delta) {
@@ -235,7 +258,32 @@ export default function App() {
         {visiblePupils.map((pupil) => (
           <div className="pupil-card" key={pupil.id}>
             <div className="pupil-info">
-              <div className="pupil-name">{pupil.name}</div>
+              {editingId === pupil.id ? (
+                <div className="edit-row">
+                  <input
+                    className="edit-input"
+                    value={editingName}
+                    onChange={(event) => setEditingName(event.target.value)}
+                    aria-label="Нове ім'я учня"
+                  />
+                  <button
+                    className="edit-save"
+                    type="button"
+                    onClick={() => saveEdit(pupil.id)}
+                  >
+                    Зберегти
+                  </button>
+                  <button
+                    className="edit-cancel"
+                    type="button"
+                    onClick={cancelEdit}
+                  >
+                    Скасувати
+                  </button>
+                </div>
+              ) : (
+                <div className="pupil-name">{pupil.name}</div>
+              )}
               <div className="pupil-warnings">
                 Зауваження: <strong>{pupil.warnings}</strong>
               </div>
@@ -261,6 +309,13 @@ export default function App() {
                 onClick={() => updateWarnings(pupil.id, 1)}
               >
                 ➕
+              </button>
+              <button
+                className="edit-btn"
+                type="button"
+                onClick={() => startEdit(pupil)}
+              >
+                Редагувати
               </button>
               <button
                 className="delete-btn"
