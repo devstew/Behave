@@ -1,0 +1,260 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Space+Grotesk:wght@400;500;600&display=swap");
+
+:root {
+  --bg: #fff3f1;
+  --bg-deep: #f9d7d1;
+  --ink: #3b1f1f;
+  --accent: #e0433f;
+  --accent-deep: #b6282a;
+  --card: #ffffff;
+  --shadow: 0 20px 40px rgba(176, 50, 50, 0.2);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at top, #ffe2dc 0%, #fff3f1 45%, #f7c9c1 100%);
+  min-height: 100vh;
+}
+
+.page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 48px 24px 72px;
+  display: grid;
+  gap: 24px;
+}
+
+.hero {
+  background: linear-gradient(135deg, #fff 0%, #ffe8e3 60%, #ffd2cb 100%);
+  border-radius: 28px;
+  padding: 28px 32px;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: -40px;
+  background: radial-gradient(circle, rgba(224, 67, 63, 0.12) 0%, transparent 70%);
+  opacity: 0.9;
+}
+
+.hero-title {
+  font-family: "DM Serif Display", serif;
+  font-size: clamp(2.5rem, 5vw, 3.6rem);
+  letter-spacing: 1px;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-subtitle {
+  margin-top: 8px;
+  font-size: 1.05rem;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-badges {
+  display: flex;
+  gap: 12px;
+  font-size: 1.6rem;
+  margin-top: 18px;
+  position: relative;
+  z-index: 1;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.stat-card {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+
+.stat-label {
+  font-size: 0.95rem;
+  opacity: 0.8;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 600;
+  margin-top: 6px;
+  color: var(--accent-deep);
+}
+
+.add-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+}
+
+.name-input {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 2px solid #f4b5ad;
+  font-size: 1rem;
+  background: #fff;
+}
+
+.name-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(224, 67, 63, 0.15);
+}
+
+.add-button {
+  padding: 14px 20px;
+  border-radius: 14px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.add-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 20px rgba(224, 67, 63, 0.3);
+}
+
+.list {
+  display: grid;
+  gap: 14px;
+}
+
+.pupil-card {
+  background: var(--card);
+  border-radius: 18px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+
+.pupil-info {
+  display: grid;
+  gap: 6px;
+}
+
+.pupil-name {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.pupil-warnings strong {
+  color: var(--accent-deep);
+}
+
+.pupil-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.warning-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 2px solid #f6b0a8;
+  background: #fff7f6;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.warning-btn:hover {
+  background: #ffe0da;
+  transform: translateY(-1px);
+}
+
+.delete-btn {
+  border: none;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fbe4e0;
+  color: var(--accent-deep);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.footer {
+  text-align: center;
+  font-size: 1.05rem;
+}
+
+.loader {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 240, 238, 0.94);
+  display: grid;
+  place-items: center;
+  z-index: 10;
+  animation: fadeOut 0.4s ease forwards;
+  animation-delay: 0.9s;
+}
+
+.loader-card {
+  background: #fff;
+  padding: 32px 40px;
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.loader-icon {
+  font-size: 2.4rem;
+}
+
+.loader-title {
+  font-family: "DM Serif Display", serif;
+  font-size: 2rem;
+  margin-top: 10px;
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@media (max-width: 720px) {
+  .add-form {
+    grid-template-columns: 1fr;
+  }
+
+  .pupil-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pupil-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
