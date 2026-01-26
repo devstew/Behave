@@ -290,6 +290,62 @@ body {
   gap: 10px;
 }
 
+.pupil-trend {
+  min-width: 160px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #fff3f1;
+  border: 1px solid #f6b0a8;
+}
+
+.trend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.trend-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.trend-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.trend-good {
+  background: #e8f6ef;
+  color: #1f6b46;
+}
+
+.trend-bad {
+  background: #fde7e2;
+  color: #a3332f;
+}
+
+.trend-flat {
+  background: #f8f0ec;
+  color: #7a4a43;
+}
+
+.sparkline {
+  width: 120px;
+  height: 28px;
+}
+
+.sparkline-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .warning-btn {
   width: 42px;
   height: 42px;
@@ -382,5 +438,9 @@ body {
   .pupil-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .pupil-trend {
+    width: 100%;
   }
 }

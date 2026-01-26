@@ -27,6 +27,21 @@ function getLastSevenDays() {
   return days;
 }
 
+function buildSparklinePoints(values, width = 120, height = 28, padding = 2) {
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = Math.max(1, max - min);
+  const step = (width - padding * 2) / (values.length - 1);
+  return values
+    .map((value, index) => {
+      const x = padding + index * step;
+      const y =
+        height - padding - ((value - min) / range) * (height - padding * 2);
+      return `${x},${y}`;
+    })
+    .join(" ");
+}
+
 function loadPupils() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -77,6 +92,7 @@ export default function App() {
   );
 
   const lastSevenDays = useMemo(() => getLastSevenDays(), []);
+  const todayKey = useMemo(() => getDateKey(), []);
 
   const visiblePupils = useMemo(() => {
     const filtered = showWinnersOnly
@@ -255,78 +271,118 @@ export default function App() {
             Поки немає учнів. Додайте першого! 🎉
           </div>
         )}
-        {visiblePupils.map((pupil) => (
-          <div className="pupil-card" key={pupil.id}>
-            <div className="pupil-info">
-              {editingId === pupil.id ? (
-                <div className="edit-row">
-                  <input
-                    className="edit-input"
-                    value={editingName}
-                    onChange={(event) => setEditingName(event.target.value)}
-                    aria-label="Нове ім'я учня"
-                  />
-                  <button
-                    className="edit-save"
-                    type="button"
-                    onClick={() => saveEdit(pupil.id)}
-                  >
-                    Зберегти
-                  </button>
-                  <button
-                    className="edit-cancel"
-                    type="button"
-                    onClick={cancelEdit}
-                  >
-                    Скасувати
-                  </button>
+        {visiblePupils.map((pupil) => {
+          const historyValues = lastSevenDays.map(
+            (day) => pupil.history?.[day.key] ?? 0
+          );
+          const points = buildSparklinePoints(historyValues);
+          const yesterdayKey = lastSevenDays[lastSevenDays.length - 2]?.key;
+          const todayValue = pupil.history?.[todayKey] ?? 0;
+          const yesterdayValue = yesterdayKey
+            ? pupil.history?.[yesterdayKey] ?? 0
+            : 0;
+          const trendDelta = todayValue - yesterdayValue;
+          const trendLabel =
+            trendDelta < 0 ? "краще" : trendDelta > 0 ? "гірше" : "без змін";
+          const trendIcon =
+            trendDelta < 0 ? "↘" : trendDelta > 0 ? "↗" : "→";
+
+          return (
+            <div className="pupil-card" key={pupil.id}>
+              <div className="pupil-info">
+                {editingId === pupil.id ? (
+                  <div className="edit-row">
+                    <input
+                      className="edit-input"
+                      value={editingName}
+                      onChange={(event) => setEditingName(event.target.value)}
+                      aria-label="Нове ім'я учня"
+                    />
+                    <button
+                      className="edit-save"
+                      type="button"
+                      onClick={() => saveEdit(pupil.id)}
+                    >
+                      Зберегти
+                    </button>
+                    <button
+                      className="edit-cancel"
+                      type="button"
+                      onClick={cancelEdit}
+                    >
+                      Скасувати
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pupil-name">{pupil.name}</div>
+                )}
+                <div className="pupil-warnings">
+                  Зауваження: <strong>{pupil.warnings}</strong>
                 </div>
-              ) : (
-                <div className="pupil-name">{pupil.name}</div>
-              )}
-              <div className="pupil-warnings">
-                Зауваження: <strong>{pupil.warnings}</strong>
+                <div className="pupil-history">
+                  {lastSevenDays.map((day) => (
+                    <span className="history-chip" key={day.key}>
+                      {day.label}: {pupil.history?.[day.key] ?? 0}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="pupil-history">
-                {lastSevenDays.map((day) => (
-                  <span className="history-chip" key={day.key}>
-                    {day.label}: {pupil.history?.[day.key] ?? 0}
+              <div className="pupil-actions">
+                <button
+                  className="warning-btn"
+                  type="button"
+                  onClick={() => updateWarnings(pupil.id, -1)}
+                >
+                  ➖
+                </button>
+                <button
+                  className="warning-btn"
+                  type="button"
+                  onClick={() => updateWarnings(pupil.id, 1)}
+                >
+                  ➕
+                </button>
+                <button
+                  className="edit-btn"
+                  type="button"
+                  onClick={() => startEdit(pupil)}
+                >
+                  Редагувати
+                </button>
+                <button
+                  className="delete-btn"
+                  type="button"
+                  onClick={() => handleDelete(pupil.id)}
+                >
+                  Видалити
+                </button>
+              </div>
+              <div className="pupil-trend">
+                <div className="trend-header">
+                  <span className="trend-title">Тренд</span>
+                  <span
+                    className={`trend-badge ${
+                      trendDelta < 0
+                        ? "trend-good"
+                        : trendDelta > 0
+                        ? "trend-bad"
+                        : "trend-flat"
+                    }`}
+                  >
+                    {trendIcon} {trendLabel}
                   </span>
-                ))}
+                </div>
+                <svg
+                  className="sparkline"
+                  viewBox="0 0 120 28"
+                  aria-hidden="true"
+                >
+                  <polyline points={points} className="sparkline-line" />
+                </svg>
               </div>
             </div>
-            <div className="pupil-actions">
-              <button
-                className="warning-btn"
-                type="button"
-                onClick={() => updateWarnings(pupil.id, -1)}
-              >
-                ➖
-              </button>
-              <button
-                className="warning-btn"
-                type="button"
-                onClick={() => updateWarnings(pupil.id, 1)}
-              >
-                ➕
-              </button>
-              <button
-                className="edit-btn"
-                type="button"
-                onClick={() => startEdit(pupil)}
-              >
-                Редагувати
-              </button>
-              <button
-                className="delete-btn"
-                type="button"
-                onClick={() => handleDelete(pupil.id)}
-              >
-                Видалити
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
 
       <footer className="footer">
