@@ -67,11 +67,19 @@ export default function App() {
   const [showLoader, setShowLoader] = useState(true);
   const [isHydrated, setIsHydrated] = useState(false);
   const [sortMode, setSortMode] = useState("name");
+  const [warningsSortDesc, setWarningsSortDesc] = useState(true);
   const [showWinnersOnly, setShowWinnersOnly] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState("");
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [devSettings, setDevSettings] = useState({
+    copy: true,
+    add: true,
+    edit: true,
+    remove: true
+  });
 
   useEffect(() => {
     setPupils(loadPupils());
@@ -95,6 +103,15 @@ export default function App() {
       new Intl.DateTimeFormat("uk-UA", { weekday: "long" }).format(new Date()),
     []
   );
+  const todayDateLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat("uk-UA", {
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+      }).format(new Date()),
+    []
+  );
 
   const lastWeekdays = useMemo(() => getLastWeekdays(), []);
   const todayKey = useMemo(() => getDateKey(), []);
@@ -104,15 +121,14 @@ export default function App() {
       ? pupils.filter((pupil) => pupil.warnings === 0)
       : pupils;
     const sorted = [...filtered];
-    if (sortMode === "warnings-desc") {
-      sorted.sort((a, b) => b.warnings - a.warnings);
-    } else if (sortMode === "warnings-asc") {
-      sorted.sort((a, b) => a.warnings - b.warnings);
+    if (sortMode === "warnings") {
+      const dir = warningsSortDesc ? -1 : 1;
+      sorted.sort((a, b) => (a.warnings - b.warnings) * dir);
     } else {
       sorted.sort((a, b) => a.name.localeCompare(b.name, "uk"));
     }
     return sorted;
-  }, [pupils, sortMode, showWinnersOnly]);
+  }, [pupils, sortMode, showWinnersOnly, warningsSortDesc]);
 
   function handleAdd(event) {
     event.preventDefault();
@@ -198,6 +214,59 @@ export default function App() {
     setTimeout(() => setCopyStatus(""), 2000);
   }
 
+  function handleSnapshot() {
+    const html = `
+      <html>
+        <head>
+          <title>Behave snapshot</title>
+          <style>
+            body { font-family: "Space Grotesk", sans-serif; background: #fff3f1; padding: 24px; }
+            .card { border-radius: 16px; border: 1px solid #f6b0a8; padding: 16px; margin-bottom: 16px; }
+            .title { font-size: 1.5rem; margin-bottom: 8px; }
+            .row { display: flex; justify-content: space-between; align-items: center; }
+            .pill { border-radius: 999px; padding: 6px 12px; background: #ffe5e0; font-weight: 600; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="title">Behave snapshot</div>
+            <div class="row">
+              <div>${todayLabel}</div>
+              <div>${todayDateLabel}</div>
+            </div>
+          </div>
+          ${visiblePupils
+            .map(
+              (pupil) => `
+                <div class="card">
+                  <div class="row">
+                    <strong>${pupil.name}</strong>
+                    <span class="pill">Зауважень: ${pupil.warnings}</span>
+                  </div>
+                </div>
+              `
+            )
+            .join("")}
+        </body>
+      </html>
+    `;
+    const snapshotWindow = window.open("", "_blank");
+    if (!snapshotWindow) return;
+    snapshotWindow.document.write(html);
+    snapshotWindow.document.close();
+    snapshotWindow.focus();
+    snapshotWindow.print();
+  }
+
+  function toggleDevSetting(key) {
+    setDevSettings((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  const showCopyControls = devSettings.copy;
+  const showAddForm = devSettings.add;
+  const showEditActions = devSettings.edit;
+  const showDeleteActions = devSettings.remove;
+
   const zeroWarningCount = pupils.filter((pupil) => pupil.warnings === 0).length;
 
   return (
@@ -211,10 +280,23 @@ export default function App() {
         </div>
       )}
 
-      <header className="hero">
-        <div className="hero-title">Behave</div>
+      <div className="page-header">
+        <div className="page-title">Behave</div>
+        <button
+          className="burger"
+          type="button"
+          aria-label="Відкрити налаштування"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+      </div>
+
+      <div className="hero-card">
         <div className="hero-subtitle">
-          Відстежуйте зауваження за тиждень із турботою та трохи блиску ✨
+          Відстежуйте зауваження за тиждень з турботою та трохи блиску ✨
         </div>
         <div className="hero-badges">
           <span>🍎</span>
@@ -222,9 +304,17 @@ export default function App() {
           <span>⭐</span>
           <span>🧸</span>
         </div>
-      </header>
+      </div>
 
-      <section className="stats">
+      <section className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-label">Сьогодні</div>
+          <div className="stat-value stat-day">{todayLabel}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Дата</div>
+          <div className="stat-value">{todayDateLabel}</div>
+        </div>
         <div className="stat-card">
           <div className="stat-label">Всього зауважень</div>
           <div className="stat-value">{totalWarnings}</div>
@@ -233,56 +323,78 @@ export default function App() {
           <div className="stat-label">Дітей без зауважень</div>
           <div className="stat-value">{zeroWarningCount}</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">Сьогодні</div>
-          <div className="stat-value stat-day">{todayLabel}</div>
-        </div>
       </section>
 
-      <section className="controls">
-        <div className="control-group">
-          <label className="control-label" htmlFor="sortMode">
-            Сортування
-          </label>
-          <select
-            id="sortMode"
-            className="control-select"
-            value={sortMode}
-            onChange={(event) => setSortMode(event.target.value)}
+      <section className="controls-block">
+        <div className="sort-buttons">
+          <button
+            type="button"
+            className={`sort-btn ${sortMode === "name" ? "is-active" : ""}`}
+            onClick={() => {
+              setSortMode("name");
+              setWarningsSortDesc(true);
+            }}
           >
-            <option value="name">За алфавітом</option>
-            <option value="warnings-desc">Зауважень більше → менше</option>
-            <option value="warnings-asc">Зауважень менше → більше</option>
-          </select>
-        </div>
-        <label className="control-toggle">
-          <input
-            type="checkbox"
-            checked={showWinnersOnly}
-            onChange={(event) => setShowWinnersOnly(event.target.checked)}
-          />
-          Тільки переможці без зауважень 🏆
-        </label>
-        <div className="control-actions">
-          <button className="copy-button" type="button" onClick={handleCopyData}>
-            Скопіювати дані
+            За алфавітом
           </button>
-          {copyStatus && <span className="copy-status">{copyStatus}</span>}
+          <button
+            type="button"
+            className={`sort-btn ${sortMode === "warnings" ? "is-active" : ""}`}
+            onClick={() => {
+              setSortMode("warnings");
+              setWarningsSortDesc((prev) =>
+                sortMode === "warnings" ? !prev : prev
+              );
+            }}
+          >
+            Зауваження {warningsSortDesc ? "↓" : "↑"}
+          </button>
+        </div>
+        <div className="control-row">
+          <label className="control-toggle">
+            <input
+              type="checkbox"
+              checked={showWinnersOnly}
+              onChange={(event) => setShowWinnersOnly(event.target.checked)}
+            />
+            Тільки переможці без зауважень 🏆
+          </label>
+          <div className="control-actions">
+            <button
+              className="snapshot-btn"
+              type="button"
+              onClick={handleSnapshot}
+            >
+              Знімок PDF
+            </button>
+            {showCopyControls && (
+              <button
+                className="copy-button"
+                type="button"
+                onClick={handleCopyData}
+              >
+                Скопіювати дані
+              </button>
+            )}
+            {copyStatus && <span className="copy-status">{copyStatus}</span>}
+          </div>
         </div>
       </section>
 
-      <form className="add-form" onSubmit={handleAdd}>
-        <input
-          className="name-input"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Додати ім'я учня"
-          aria-label="Ім'я учня"
-        />
-        <button className="add-button" type="submit">
-          Додати учня ➕
-        </button>
-      </form>
+      {showAddForm && (
+        <form className="add-form" onSubmit={handleAdd}>
+          <input
+            className="name-input"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Додати ім'я учня"
+            aria-label="Ім'я учня"
+          />
+          <button className="add-button" type="submit">
+            Додати учня ➕
+          </button>
+        </form>
+      )}
 
       <section className="list">
         {visiblePupils.length === 0 && (
@@ -305,40 +417,64 @@ export default function App() {
             trendDelta < 0 ? "краще" : trendDelta > 0 ? "гірше" : "без змін";
           const trendIcon =
             trendDelta < 0 ? "↘" : trendDelta > 0 ? "↗" : "→";
+          const streakCount = (() => {
+            let count = 0;
+            for (let idx = historyValues.length - 1; idx >= 0; idx -= 1) {
+              if (historyValues[idx] === 0) count += 1;
+              else break;
+            }
+            return count;
+          })();
+          const perfectWeek = historyValues.every((value) => value === 0);
+          const badges = [];
+          if (pupil.warnings === 0) badges.push("🎉 без зауважень");
+          if (perfectWeek) badges.push("🏅 тиждень чисто");
+          else if (streakCount >= 3) badges.push(`🔥 ${streakCount}дн.`);
 
           return (
             <div className="pupil-card" key={pupil.id}>
               <div className="pupil-info">
-                {editingId === pupil.id ? (
-                  <div className="edit-row">
-                    <input
-                      className="edit-input"
-                      value={editingName}
-                      onChange={(event) => setEditingName(event.target.value)}
-                      aria-label="Нове ім'я учня"
-                    />
-                    <button
-                      className="edit-save"
-                      type="button"
-                      onClick={() => saveEdit(pupil.id)}
-                    >
-                      Зберегти
-                    </button>
-                    <button
-                      className="edit-cancel"
-                      type="button"
-                      onClick={cancelEdit}
-                    >
-                      Скасувати
-                    </button>
+                <div className="pupil-heading">
+                  <div className="pupil-name-block">
+                    {editingId === pupil.id ? (
+                      <div className="edit-row">
+                        <input
+                          className="edit-input"
+                          value={editingName}
+                          onChange={(event) => setEditingName(event.target.value)}
+                          aria-label="Нове ім'я учня"
+                        />
+                        <button
+                          className="edit-save"
+                          type="button"
+                          onClick={() => saveEdit(pupil.id)}
+                        >
+                          Зберегти
+                        </button>
+                        <button
+                          className="edit-cancel"
+                          type="button"
+                          onClick={cancelEdit}
+                        >
+                          Скасувати
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="pupil-name">{pupil.name}</div>
+                    )}
                   </div>
-                ) : (
-                  <div className="pupil-name">{pupil.name}</div>
-                )}
+                  <div className="reward-badges">
+                    {badges.map((badge) => (
+                      <span className="reward-badge" key={`${pupil.id}-${badge}`}>
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
+                </div>
                 <div className="pupil-warnings">
                   Зауваження: <strong>{pupil.warnings}</strong>
                 </div>
-                <div className="pupil-history">
+                <div className="pupil-history single-row">
                   {lastWeekdays.map((day) => (
                     <span className="history-chip" key={day.key}>
                       {day.label}: {pupil.history?.[day.key] ?? 0}
@@ -361,20 +497,24 @@ export default function App() {
                 >
                   ➕
                 </button>
-                <button
-                  className="edit-btn"
-                  type="button"
-                  onClick={() => startEdit(pupil)}
-                >
-                  Редагувати
-                </button>
-                <button
-                  className="delete-btn"
-                  type="button"
-                  onClick={() => startDelete(pupil)}
-                >
-                  Видалити
-                </button>
+                {showEditActions && (
+                  <button
+                    className="edit-btn"
+                    type="button"
+                    onClick={() => startEdit(pupil)}
+                  >
+                    Редагувати
+                  </button>
+                )}
+                {showDeleteActions && (
+                  <button
+                    className="delete-btn"
+                    type="button"
+                    onClick={() => startDelete(pupil)}
+                  >
+                    Видалити
+                  </button>
+                )}
               </div>
               <div className="pupil-trend">
                 <div className="trend-header">
@@ -391,11 +531,7 @@ export default function App() {
                     {trendIcon} {trendLabel}
                   </span>
                 </div>
-                <svg
-                  className="sparkline"
-                  viewBox="0 0 120 28"
-                  aria-hidden="true"
-                >
+                <svg className="sparkline" viewBox="0 0 120 28" aria-hidden="true">
                   <polyline points={points} className="sparkline-line" />
                 </svg>
               </div>
@@ -413,10 +549,18 @@ export default function App() {
               <strong>{pendingDelete.name}</strong> з класу?
             </div>
             <div className="modal-actions">
-              <button className="modal-btn modal-cancel" onClick={cancelDelete}>
+              <button
+                className="modal-btn modal-cancel"
+                onClick={cancelDelete}
+                type="button"
+              >
                 Скасувати
               </button>
-              <button className="modal-btn modal-confirm" onClick={confirmDelete}>
+              <button
+                className="modal-btn modal-confirm"
+                onClick={confirmDelete}
+                type="button"
+              >
                 Видалити
               </button>
             </div>
@@ -427,6 +571,59 @@ export default function App() {
       <footer className="footer">
         Зірки нагороди для героїв без зауважень ⭐🧡⭐
       </footer>
+
+      {settingsOpen && (
+        <div className="settings-overlay" role="dialog" aria-modal="true">
+          <div className="settings-card">
+            <div className="settings-header">
+              <div className="settings-title">Інструменти</div>
+              <button
+                className="settings-close"
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                aria-label="Закрити"
+              >
+                ×
+              </button>
+            </div>
+            <div className="settings-subtitle">
+              Увімкніть або вимкніть режим розробника
+            </div>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={devSettings.copy}
+                onChange={() => toggleDevSetting("copy")}
+              />
+              Кнопка копіювання
+            </label>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={devSettings.add}
+                onChange={() => toggleDevSetting("add")}
+              />
+              Форма додавання учня
+            </label>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={devSettings.edit}
+                onChange={() => toggleDevSetting("edit")}
+              />
+              Редагування учня
+            </label>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={devSettings.remove}
+                onChange={() => toggleDevSetting("remove")}
+              />
+              Видалення учня
+            </label>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
