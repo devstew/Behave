@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "behave:pupils";
 const DEFAULT_PUPILS = [
-  { id: crypto.randomUUID(), name: "Оля", warnings: 0, history: {} },
-  { id: crypto.randomUUID(), name: "Максим", warnings: 0, history: {} }
+  { id: crypto.randomUUID(), name: "Оля", warnings: 0, history: {}, note: "" },
+  { id: crypto.randomUUID(), name: "Максим", warnings: 0, history: {}, note: "" }
 ];
 const DEV_SETTINGS_KEY = "behave:dev-settings";
 const DEFAULT_DEV_SETTINGS = {
@@ -73,7 +73,8 @@ function loadPupils() {
     if (!Array.isArray(parsed)) return DEFAULT_PUPILS;
     return parsed.map((pupil) => ({
       ...pupil,
-      history: pupil.history ?? {}
+      history: pupil.history ?? {},
+      note: pupil.note ?? ""
     }));
   } catch {
     return DEFAULT_PUPILS;
@@ -97,6 +98,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState("");
   const [bursts, setBursts] = useState([]);
   const [tremorId, setTremorId] = useState(null);
+  const [openNotes, setOpenNotes] = useState({});
 
   useEffect(() => {
     setPupils(loadPupils());
@@ -171,7 +173,13 @@ export default function App() {
     if (!trimmed) return;
     setPupils((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), name: trimmed, warnings: 0, history: {} }
+      {
+        id: crypto.randomUUID(),
+        name: trimmed,
+        warnings: 0,
+        history: {},
+        note: ""
+      }
     ]);
     setName("");
   }
@@ -329,6 +337,18 @@ export default function App() {
     );
     setTremorId(pupilId);
     setTimeout(() => setTremorId(null), 320);
+  }
+
+  function toggleNote(id) {
+    setOpenNotes((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function handleNoteChange(id, value) {
+    setPupils((prev) =>
+      prev.map((pupil) =>
+        pupil.id === id ? { ...pupil, note: value } : pupil
+      )
+    );
   }
 
   const showCopyControls = devSettings.copy;
@@ -565,8 +585,8 @@ export default function App() {
               <div className="pupil-info">
                 <div className="pupil-heading">
                   <div className="pupil-name-block">
-                    {editingId === pupil.id ? (
-                      <div className="edit-row">
+                {editingId === pupil.id ? (
+                  <div className="edit-row">
                         <input
                           className="edit-input"
                           value={editingName}
@@ -603,14 +623,31 @@ export default function App() {
                 <div className="pupil-warnings">
                   Зауваження: <strong>{pupil.warnings}</strong>
                 </div>
-              <div className="pupil-history single-row">
-                {lastWeekdays.map((day) => (
-                  <span className="history-chip" key={day.key}>
-                    {day.label}: {pupil.history?.[day.key] ?? 0}
-                  </span>
-                ))}
+                <div className="pupil-history single-row">
+                  {lastWeekdays.map((day) => (
+                    <span className="history-chip" key={day.key}>
+                      {day.label}: {pupil.history?.[day.key] ?? 0}
+                    </span>
+                  ))}
+                </div>
+                <div className="note-block">
+                  <button
+                    type="button"
+                    className="note-toggle"
+                    onClick={() => toggleNote(pupil.id)}
+                  >
+                    {openNotes[pupil.id] ? "Сховати нотатку" : "Додати нотатку"}
+                  </button>
+                  {openNotes[pupil.id] && (
+                    <textarea
+                      className="note-input"
+                      value={pupil.note ?? ""}
+                      onChange={(e) => handleNoteChange(pupil.id, e.target.value)}
+                      placeholder="Запишіть нотатку про учня"
+                    />
+                  )}
+                </div>
               </div>
-            </div>
             <div className="pupil-bottom-row">
               <div className="warning-row">
                 <button
