@@ -5,6 +5,24 @@ const DEFAULT_PUPILS = [
   { id: crypto.randomUUID(), name: "Оля", warnings: 0, history: {} },
   { id: crypto.randomUUID(), name: "Максим", warnings: 0, history: {} }
 ];
+const DEV_SETTINGS_KEY = "behave:dev-settings";
+const DEFAULT_DEV_SETTINGS = {
+  copy: true,
+  add: true,
+  edit: true,
+  remove: true,
+  glowMode: "all"
+};
+
+function loadDevSettings() {
+  if (typeof window === "undefined") return DEFAULT_DEV_SETTINGS;
+  try {
+    const raw = localStorage.getItem(DEV_SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : DEFAULT_DEV_SETTINGS;
+  } catch {
+    return DEFAULT_DEV_SETTINGS;
+  }
+}
 
 function getDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -13,20 +31,21 @@ function getDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function getLastWeekdays(count = 5) {
+function getWeekdays() {
   const days = [];
-  const cursor = new Date();
-  while (days.length < count) {
-    const dayOfWeek = cursor.getDay();
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      days.unshift({
-        key: getDateKey(cursor),
-        label: new Intl.DateTimeFormat("uk-UA", { weekday: "short" }).format(
-          cursor
-        )
-      });
-    }
-    cursor.setDate(cursor.getDate() - 1);
+  const today = new Date();
+  const monday = new Date(today);
+  const offset = (today.getDay() + 6) % 7; // 0 -> Mon
+  monday.setDate(today.getDate() - offset);
+  for (let i = 0; i < 5; i += 1) {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    days.push({
+      key: getDateKey(date),
+      label: new Intl.DateTimeFormat("uk-UA", { weekday: "short" }).format(
+        date
+      )
+    });
   }
   return days;
 }
@@ -74,12 +93,10 @@ export default function App() {
   const [editingName, setEditingName] = useState("");
   const [pendingDelete, setPendingDelete] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [devSettings, setDevSettings] = useState({
-    copy: true,
-    add: true,
-    edit: true,
-    remove: true
-  });
+  const [devSettings, setDevSettings] = useState(loadDevSettings);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [bursts, setBursts] = useState([]);
+  const [tremorId, setTremorId] = useState(null);
 
   useEffect(() => {
     setPupils(loadPupils());
@@ -92,6 +109,15 @@ export default function App() {
     if (!isHydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(pupils));
   }, [pupils, isHydrated]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(DEV_SETTINGS_KEY, JSON.stringify(devSettings));
+    } catch {
+      // ignore
+    }
+  }, [devSettings]);
 
   const totalWarnings = useMemo(
     () => pupils.reduce((sum, pupil) => sum + pupil.warnings, 0),
@@ -113,13 +139,22 @@ export default function App() {
     []
   );
 
-  const lastWeekdays = useMemo(() => getLastWeekdays(), []);
+  const lastWeekdays = useMemo(() => getWeekdays(), []);
+  const todayDay = useMemo(() => new Date().getDay(), []);
+  const fakeFriday = devSettings.fakeFriday ?? false;
+  const effectiveDay = fakeFriday ? 5 : todayDay;
   const todayKey = useMemo(() => getDateKey(), []);
 
   const visiblePupils = useMemo(() => {
-    const filtered = showWinnersOnly
+    const filteredByWarnings = showWinnersOnly
       ? pupils.filter((pupil) => pupil.warnings === 0)
       : pupils;
+    const query = searchTerm.trim().toLowerCase();
+    const filtered = query
+      ? filteredByWarnings.filter((pupil) =>
+          pupil.name.toLowerCase().includes(query)
+        )
+      : filteredByWarnings;
     const sorted = [...filtered];
     if (sortMode === "warnings") {
       const dir = warningsSortDesc ? -1 : 1;
@@ -128,7 +163,7 @@ export default function App() {
       sorted.sort((a, b) => a.name.localeCompare(b.name, "uk"));
     }
     return sorted;
-  }, [pupils, sortMode, showWinnersOnly, warningsSortDesc]);
+  }, [pupils, sortMode, showWinnersOnly, warningsSortDesc, searchTerm]);
 
   function handleAdd(event) {
     event.preventDefault();
@@ -262,6 +297,40 @@ export default function App() {
     setDevSettings((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
+  function setGlowMode(mode) {
+    setDevSettings((prev) => ({ ...prev, glowMode: mode }));
+  }
+
+  function fillMockHistory() {
+    setPupils((prev) =>
+      prev.map((pupil) => {
+        const history = { ...pupil.history };
+        lastWeekdays.forEach((day) => {
+          history[day.key] = Math.floor(Math.random() * 3); // 0–2
+        });
+        const todaysValue = history[todayKey] ?? 0;
+        return { ...pupil, history, warnings: todaysValue };
+      })
+    );
+  }
+
+  function triggerBurst(pupilId, warnings, allow) {
+    if (warnings > 0 || !allow) return;
+    const left = Math.floor(Math.random() * 90) + 5; // 5–95%
+    const top = Math.floor(Math.random() * 40) - 50; // -50% to -10%
+    const emojiSet = ["🎉", "🥳", "🎈", "✨", "🎊"];
+    const emoji =
+      emojiSet[Math.floor(Math.random() * emojiSet.length)] ?? "🎉";
+    const key = crypto.randomUUID();
+    setBursts((prev) => [...prev, { id: pupilId, key, left, top, emoji }]);
+    setTimeout(
+      () => setBursts((prev) => prev.filter((b) => b.key !== key)),
+      1400
+    );
+    setTremorId(pupilId);
+    setTimeout(() => setTremorId(null), 320);
+  }
+
   const showCopyControls = devSettings.copy;
   const showAddForm = devSettings.add;
   const showEditActions = devSettings.edit;
@@ -280,51 +349,79 @@ export default function App() {
         </div>
       )}
 
-      <div className="page-header">
-        <div className="page-title">Behave</div>
+      <div className="above-fold">
+        <div className="page-header">
+          <div className="page-title">Behave</div>
+          <button
+            className="burger"
+            type="button"
+            aria-label="Відкрити налаштування"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+        </div>
+
+        <div className="hero-card">
+          <div className="hero-subtitle">
+            Відстежуйте зауваження за тиждень з турботою та трохи блиску ✨
+          </div>
+          <div className="hero-badges">
+            <span>🍎</span>
+            <span>📒</span>
+            <span>⭐</span>
+            <span>🧸</span>
+          </div>
+        </div>
+
+        <section className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-label">Сьогодні</div>
+            <div className="stat-value stat-day">{todayLabel}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Дата</div>
+            <div className="stat-value">{todayDateLabel}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Всього зауважень</div>
+            <div className="stat-value">{totalWarnings}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Дітей без зауважень</div>
+            <div className="stat-value">{zeroWarningCount}</div>
+          </div>
+        </section>
         <button
-          className="burger"
           type="button"
-          aria-label="Відкрити налаштування"
-          onClick={() => setSettingsOpen(true)}
+          className="scroll-btn"
+          onClick={() => {
+            const target = document.getElementById("list-section");
+            if (target) target.scrollIntoView({ behavior: "smooth" });
+          }}
         >
-          <span />
-          <span />
-          <span />
+          Список учнів ↓
         </button>
       </div>
 
-      <div className="hero-card">
-        <div className="hero-subtitle">
-          Відстежуйте зауваження за тиждень з турботою та трохи блиску ✨
-        </div>
-        <div className="hero-badges">
-          <span>🍎</span>
-          <span>📒</span>
-          <span>⭐</span>
-          <span>🧸</span>
-        </div>
-      </div>
+      {showAddForm && (
+        <form className="add-form" onSubmit={handleAdd}>
+          <input
+            className="name-input"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Додати ім'я учня"
+            aria-label="Ім'я учня"
+          />
+          <button className="add-button" type="submit">
+            Додати учня ➕
+          </button>
+        </form>
+      )}
 
-      <section className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-label">Сьогодні</div>
-          <div className="stat-value stat-day">{todayLabel}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Дата</div>
-          <div className="stat-value">{todayDateLabel}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Всього зауважень</div>
-          <div className="stat-value">{totalWarnings}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Дітей без зауважень</div>
-          <div className="stat-value">{zeroWarningCount}</div>
-        </div>
-      </section>
-
+      <div id="list-section" />
       <section className="controls-block">
         <div className="sort-buttons">
           <button
@@ -349,6 +446,16 @@ export default function App() {
           >
             Зауваження {warningsSortDesc ? "↓" : "↑"}
           </button>
+        </div>
+        <div className="search-row">
+          <input
+            id="pupilSearch"
+            className="search-input"
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Шукати учня"
+          />
         </div>
         <div className="control-row">
           <label className="control-toggle">
@@ -376,25 +483,19 @@ export default function App() {
                 Скопіювати дані
               </button>
             )}
+            {showCopyControls && (
+              <button
+                className="mock-button"
+                type="button"
+                onClick={fillMockHistory}
+              >
+                Згенерувати історію
+              </button>
+            )}
             {copyStatus && <span className="copy-status">{copyStatus}</span>}
           </div>
         </div>
       </section>
-
-      {showAddForm && (
-        <form className="add-form" onSubmit={handleAdd}>
-          <input
-            className="name-input"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Додати ім'я учня"
-            aria-label="Ім'я учня"
-          />
-          <button className="add-button" type="submit">
-            Додати учня ➕
-          </button>
-        </form>
-      )}
 
       <section className="list">
         {visiblePupils.length === 0 && (
@@ -406,8 +507,9 @@ export default function App() {
           const historyValues = lastWeekdays.map(
             (day) => pupil.history?.[day.key] ?? 0
           );
-          const points = buildSparklinePoints(historyValues);
-          const yesterdayKey = lastWeekdays[lastWeekdays.length - 2]?.key;
+          const todayIndex = lastWeekdays.findIndex((d) => d.key === todayKey);
+          const yesterdayKey =
+            todayIndex > 0 ? lastWeekdays[todayIndex - 1].key : null;
           const todayValue = pupil.history?.[todayKey] ?? 0;
           const yesterdayValue = yesterdayKey
             ? pupil.history?.[yesterdayKey] ?? 0
@@ -417,22 +519,49 @@ export default function App() {
             trendDelta < 0 ? "краще" : trendDelta > 0 ? "гірше" : "без змін";
           const trendIcon =
             trendDelta < 0 ? "↘" : trendDelta > 0 ? "↗" : "→";
+          const consideredValues =
+            todayIndex >= 0
+              ? historyValues.slice(0, todayIndex + 1)
+              : historyValues;
           const streakCount = (() => {
             let count = 0;
-            for (let idx = historyValues.length - 1; idx >= 0; idx -= 1) {
-              if (historyValues[idx] === 0) count += 1;
+            for (let idx = consideredValues.length - 1; idx >= 0; idx -= 1) {
+              if (consideredValues[idx] === 0) count += 1;
               else break;
             }
             return count;
           })();
-          const perfectWeek = historyValues.every((value) => value === 0);
+          const perfectWeek = consideredValues.every((value) => value === 0);
+          const points = buildSparklinePoints(historyValues);
           const badges = [];
-          if (pupil.warnings === 0) badges.push("🎉 без зауважень");
-          if (perfectWeek) badges.push("🏅 тиждень чисто");
+          if (pupil.warnings === 0) badges.push("🎉 БЕЗ ЗАУВАЖЕНЬ");
+          if (perfectWeek) badges.push("🏅 ТИЖДЕНЬ ЧИСТО");
           else if (streakCount >= 3) badges.push(`🔥 ${streakCount}дн.`);
+          const devGlow =
+            pupil.warnings === 0 &&
+            (devSettings.glowMode === "all" ||
+              (devSettings.glowMode === "friday" && effectiveDay === 5));
+          const showWinnerGlow = showWinnersOnly && pupil.warnings === 0;
+          const glowActive = pupil.warnings === 0 && (devGlow || showWinnerGlow);
+          const fridayCelebrate = showWinnerGlow && effectiveDay === 5;
+          const allowBurst =
+            pupil.warnings === 0 &&
+            (fridayCelebrate || (effectiveDay === 5 && devSettings.fakeFriday));
+          const cardClass = `pupil-card${
+            glowActive ? " glow-card" : ""
+          }${fridayCelebrate ? " friday-celebrate friday-rain" : ""}${
+            tremorId === pupil.id ? " tremor" : ""
+          }`;
 
           return (
-            <div className="pupil-card" key={pupil.id}>
+            <div
+              className={cardClass}
+              key={pupil.id}
+              onClick={(e) => {
+                if ((e.target).closest("button")) return;
+                triggerBurst(pupil.id, pupil.warnings, allowBurst);
+              }}
+            >
               <div className="pupil-info">
                 <div className="pupil-heading">
                   <div className="pupil-name-block">
@@ -474,15 +603,16 @@ export default function App() {
                 <div className="pupil-warnings">
                   Зауваження: <strong>{pupil.warnings}</strong>
                 </div>
-                <div className="pupil-history single-row">
-                  {lastWeekdays.map((day) => (
-                    <span className="history-chip" key={day.key}>
-                      {day.label}: {pupil.history?.[day.key] ?? 0}
-                    </span>
-                  ))}
-                </div>
+              <div className="pupil-history single-row">
+                {lastWeekdays.map((day) => (
+                  <span className="history-chip" key={day.key}>
+                    {day.label}: {pupil.history?.[day.key] ?? 0}
+                  </span>
+                ))}
               </div>
-              <div className="pupil-actions">
+            </div>
+            <div className="pupil-bottom-row">
+              <div className="warning-row">
                 <button
                   className="warning-btn"
                   type="button"
@@ -497,26 +627,8 @@ export default function App() {
                 >
                   ➕
                 </button>
-                {showEditActions && (
-                  <button
-                    className="edit-btn"
-                    type="button"
-                    onClick={() => startEdit(pupil)}
-                  >
-                    Редагувати
-                  </button>
-                )}
-                {showDeleteActions && (
-                  <button
-                    className="delete-btn"
-                    type="button"
-                    onClick={() => startDelete(pupil)}
-                  >
-                    Видалити
-                  </button>
-                )}
               </div>
-              <div className="pupil-trend">
+              <div className="pupil-trend trend-inline">
                 <div className="trend-header">
                   <span className="trend-title">Тренд</span>
                   <span
@@ -535,9 +647,43 @@ export default function App() {
                   <polyline points={points} className="sparkline-line" />
                 </svg>
               </div>
+              {bursts
+                .filter((b) => b.id === pupil.id)
+                .map((b) => (
+                  <span
+                    key={b.key}
+                    className={`emoji-burst ${
+                      b.emoji === "🎈" ? "balloon" : "other"
+                    }`}
+                    style={{ left: `${b.left}%`, top: `${b.top}%` }}
+                  >
+                    {b.emoji}
+                  </span>
+                ))}
             </div>
-          );
-        })}
+            <div className="pupil-ops">
+              {showEditActions && (
+                <button
+                  className="edit-btn"
+                  type="button"
+                  onClick={() => startEdit(pupil)}
+                >
+                  Редагувати
+                </button>
+              )}
+              {showDeleteActions && (
+                <button
+                  className="delete-btn"
+                  type="button"
+                  onClick={() => startDelete(pupil)}
+                >
+                  Видалити
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
       </section>
 
       {pendingDelete && (
@@ -620,6 +766,38 @@ export default function App() {
                 onChange={() => toggleDevSetting("remove")}
               />
               Видалення учня
+            </label>
+            <div className="settings-subsection">Анімація відзнак</div>
+            <div className="glow-options">
+              {[
+                { value: "all", label: "Кожен день" },
+                { value: "friday", label: "Тільки п'ятниця" },
+                { value: "off", label: "Вимкнути" }
+              ].map((option) => (
+                <label key={option.value} className="glow-option">
+                  <input
+                    type="radio"
+                    name="badgeGlow"
+                    value={option.value}
+                    checked={devSettings.glowMode === option.value}
+                    onChange={() => setGlowMode(option.value)}
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={devSettings.fakeFriday ?? false}
+                onChange={() =>
+                  setDevSettings((prev) => ({
+                    ...prev,
+                    fakeFriday: !prev.fakeFriday
+                  }))
+                }
+              />
+              Увімкнути \"фейкову\" п'ятницю
             </label>
           </div>
         </div>
