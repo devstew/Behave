@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "behave:pupils";
+const LAST_WEEK_RESET_KEY = "behave:lastWeekReset";
+const PREV_WEEK_SNAPSHOT_KEY = "behave:prevWeekPupils";
 const DEFAULT_PUPILS = [
   { id: crypto.randomUUID(), name: "Оля", warnings: 0, history: {}, note: "" },
   { id: crypto.randomUUID(), name: "Максим", warnings: 0, history: {}, note: "" }
@@ -29,6 +31,31 @@ function getDateKey(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function getCurrentMondayKey() {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(d);
+  monday.setDate(diff);
+  return getDateKey(monday);
+}
+
+function mondayReset(pupils) {
+  if (typeof window === "undefined") return pupils;
+  const thisMonday = getCurrentMondayKey();
+  const lastReset = localStorage.getItem(LAST_WEEK_RESET_KEY);
+  if (lastReset === thisMonday) return pupils;
+  try {
+    localStorage.setItem(LAST_WEEK_RESET_KEY, thisMonday);
+    if (pupils.length > 0) {
+      localStorage.setItem(PREV_WEEK_SNAPSHOT_KEY, JSON.stringify(pupils));
+    }
+  } catch {
+    // ignore
+  }
+  return pupils.map((p) => ({ ...p, warnings: 0 }));
 }
 
 function getWeekdays() {
@@ -101,7 +128,8 @@ export default function App() {
   const [openNotes, setOpenNotes] = useState({});
 
   useEffect(() => {
-    setPupils(loadPupils());
+    const loaded = loadPupils();
+    setPupils(mondayReset(loaded));
     const timer = setTimeout(() => setShowLoader(false), 1200);
     setIsHydrated(true);
     return () => clearTimeout(timer);
@@ -166,6 +194,20 @@ export default function App() {
     }
     return sorted;
   }, [pupils, sortMode, showWinnersOnly, warningsSortDesc, searchTerm]);
+
+  const fullMatchPupil = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return null;
+    return visiblePupils.find(
+      (p) => p.name.toLowerCase() === q
+    ) ?? null;
+  }, [visiblePupils, searchTerm]);
+
+  useEffect(() => {
+    if (!fullMatchPupil?.id) return;
+    const el = document.getElementById(`card-${fullMatchPupil.id}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [fullMatchPupil?.id]);
 
   function handleAdd(event) {
     event.preventDefault();
@@ -257,8 +299,8 @@ export default function App() {
     setTimeout(() => setCopyStatus(""), 2000);
   }
 
-  function handleSnapshot() {
-    const html = `
+  function buildSnapshotHtml(pupilList, title, dateLabel) {
+    return `
       <html>
         <head>
           <title>Behave snapshot</title>
@@ -272,13 +314,13 @@ export default function App() {
         </head>
         <body>
           <div class="card">
-            <div class="title">Behave snapshot</div>
+            <div class="title">${title}</div>
             <div class="row">
               <div>${todayLabel}</div>
-              <div>${todayDateLabel}</div>
+              <div>${dateLabel}</div>
             </div>
           </div>
-          ${visiblePupils
+          ${pupilList
             .map(
               (pupil) => `
                 <div class="card">
@@ -293,6 +335,40 @@ export default function App() {
         </body>
       </html>
     `;
+  }
+
+  function handleSnapshotCurrentWeek() {
+    const html = buildSnapshotHtml(
+      visiblePupils,
+      "Behave — знімок поточного тижня",
+      todayDateLabel
+    );
+    const snapshotWindow = window.open("", "_blank");
+    if (!snapshotWindow) return;
+    snapshotWindow.document.write(html);
+    snapshotWindow.document.close();
+    snapshotWindow.focus();
+    snapshotWindow.print();
+  }
+
+  function handleSnapshotPrevWeek() {
+    let prevPupils = [];
+    try {
+      const raw = localStorage.getItem(PREV_WEEK_SNAPSHOT_KEY);
+      if (raw) prevPupils = JSON.parse(raw);
+      if (!Array.isArray(prevPupils)) prevPupils = [];
+    } catch {
+      prevPupils = [];
+    }
+    const dateLabel =
+      prevPupils.length > 0
+        ? "Минулий тиждень (збережено при скиданні)"
+        : "Немає даних минулого тижня";
+    const html = buildSnapshotHtml(
+      prevPupils,
+      "Behave — знімок минулого тижня",
+      dateLabel
+    );
     const snapshotWindow = window.open("", "_blank");
     if (!snapshotWindow) return;
     snapshotWindow.document.write(html);
@@ -490,9 +566,16 @@ export default function App() {
             <button
               className="snapshot-btn"
               type="button"
-              onClick={handleSnapshot}
+              onClick={handleSnapshotCurrentWeek}
             >
-              Знімок PDF
+              Знімок поточного тижня
+            </button>
+            <button
+              className="snapshot-btn"
+              type="button"
+              onClick={handleSnapshotPrevWeek}
+            >
+              Знімок минулого тижня
             </button>
             {showCopyControls && (
               <button
@@ -575,6 +658,7 @@ export default function App() {
 
           return (
             <div
+              id={`card-${pupil.id}`}
               className={cardClass}
               key={pupil.id}
               onClick={(e) => {
