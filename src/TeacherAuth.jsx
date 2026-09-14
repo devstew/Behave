@@ -5,7 +5,7 @@ import {
 } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, authReady, db, firebaseConfigured, firebaseErrorMessage } from "./firebase.js";
-import { teacherEmail } from "./teacherIdentity.js";
+import { teacherEmail, teacherLoginEmail } from "./teacherIdentity.js";
 
 function AuthCard({ children }) {
   return <main className="auth-page"><section className="auth-card">
@@ -54,7 +54,7 @@ export default function TeacherAuth({ children }) {
     setBusy(true);
     setError("");
     try {
-      const email = teacherEmail(username);
+      const email = teacherLoginEmail(username);
       await authReady;
       await signInWithEmailAndPassword(auth, email, password);
       setPassword("");
@@ -82,8 +82,8 @@ export default function TeacherAuth({ children }) {
     <h1>Вхід для вчителя</h1>
     <form className="auth-form" onSubmit={login}>
       <label>Логін<input autoComplete="username" autoCapitalize="none" spellCheck={false}
-        required minLength={3} maxLength={32} value={username} disabled={busy}
-        onChange={(event) => setUsername(event.target.value)} placeholder="teacher_anna" /></label>
+        required value={username} disabled={busy}
+        onChange={(event) => setUsername(event.target.value)} placeholder="stepan@teachers.behave.invalid" /></label>
       <label>Пароль<input type="password" autoComplete="current-password" required value={password}
         disabled={busy} onChange={(event) => setPassword(event.target.value)} /></label>
       {error && <p role="alert" className="cloud-error">{error}</p>}

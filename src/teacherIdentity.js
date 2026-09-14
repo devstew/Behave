@@ -14,3 +14,11 @@ export function normalizeUsername(value) {
 export function teacherEmail(username) {
   return `${normalizeUsername(username)}@${TEACHER_LOGIN_DOMAIN}`;
 }
+
+// Let Firebase validate login identifiers; an account address must not have
+// the teacher domain appended a second time.
+export function teacherLoginEmail(value) {
+  const login = String(value).trim().toLowerCase();
+  if (!login) throw new Error("Введіть логін.");
+  return login.includes("@") ? login : `${login}@${TEACHER_LOGIN_DOMAIN}`;
+}

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { teacherEmail } from "../src/teacherIdentity.js";
+import { teacherEmail, teacherLoginEmail } from "../src/teacherIdentity.js";
 import {
   advanceWeek, emptyWorkspace, getDateKey, getMondayKey, getWeekdays,
   importLegacyWorkspace, readLegacyWorkspace, readBackupWorkspace,
@@ -15,6 +15,15 @@ test("usernames are normalized without exposing a username directory", () => {
   for (const value of ["ab", "anna@example.com", "<script>", "аnna", "-anna", "anna.", "anna..bob", "a".repeat(33)]) {
     assert.throws(() => teacherEmail(value));
   }
+});
+
+test("login accepts account addresses and short usernames without username format limits", () => {
+  assert.equal(teacherLoginEmail(" Stepan@Teachers.Behave.Invalid "), "stepan@teachers.behave.invalid");
+  assert.equal(teacherLoginEmail(" Stepan "), "stepan@teachers.behave.invalid");
+  assert.equal(teacherLoginEmail("teacher.long.name@teachers.behave.invalid"), "teacher.long.name@teachers.behave.invalid");
+  assert.equal(teacherLoginEmail("ab"), "ab@teachers.behave.invalid");
+  assert.equal(teacherLoginEmail("a".repeat(33)), `${"a".repeat(33)}@teachers.behave.invalid`);
+  assert.throws(() => teacherLoginEmail("   "), /Введіть логін/);
 });
 
 test("dates and week boundaries use Kyiv even when another device is in UTC", () => {

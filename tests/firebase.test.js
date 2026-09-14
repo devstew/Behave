@@ -5,10 +5,10 @@ import { initializeTestEnvironment, assertFails, assertSucceeds } from "@firebas
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, getDocs, collection, serverTimestamp, setLogLevel } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
 import { connectAuthEmulator, getAuth, inMemoryPersistence, setPersistence, signInWithEmailAndPassword,
-  EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+  EmailAuthProvider, reauthenticateWithCredential, signOut, updatePassword } from "firebase/auth";
 import { emptyWorkspace, importLegacyWorkspace, updatePupilWarnings } from "../src/workspace.js";
 import { transactWorkspace } from "../src/workspaceStore.js";
-import { teacherEmail } from "../src/teacherIdentity.js";
+import { teacherEmail, teacherLoginEmail } from "../src/teacherIdentity.js";
 
 let env;
 setLogLevel("silent");
@@ -111,7 +111,7 @@ test("disabling approval immediately blocks subsequent workspace access", async 
   await assertFails(updateDoc(doc(db, "workspaces", "revoke"), { updatedAt: serverTimestamp() }));
 });
 
-test("username login, wrong-password rejection and authenticated password changes work", async () => {
+test("short and full-address login, wrong-password rejection and authenticated password changes work", async () => {
   const app = initializeApp({ apiKey: "fake-api-key", projectId: "demo-behave" }, "auth-test");
   const auth = getAuth(app);
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
@@ -125,7 +125,10 @@ test("username login, wrong-password rejection and authenticated password change
   assert.equal(response.status, 200);
   try {
     await assert.rejects(signInWithEmailAndPassword(auth, email, "wrong-password"));
-    const user = (await signInWithEmailAndPassword(auth, teacherEmail(` ${username.toUpperCase()} `), "test-only-password")).user;
+    const shortLoginUser = (await signInWithEmailAndPassword(auth, teacherLoginEmail(` ${username.toUpperCase()} `), "test-only-password")).user;
+    await signOut(auth);
+    const user = (await signInWithEmailAndPassword(auth, teacherLoginEmail(` ${email.toUpperCase()} `), "test-only-password")).user;
+    assert.equal(user.uid, shortLoginUser.uid);
     assert.equal(user.email, email);
     await assert.rejects(reauthenticateWithCredential(user, EmailAuthProvider.credential(email, "wrong-password")));
     await reauthenticateWithCredential(user, EmailAuthProvider.credential(email, "test-only-password"));
