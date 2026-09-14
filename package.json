@@ -6,15 +6,23 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/workspace.test.js",
+    "test:rules": "firebase emulators:exec --project demo-behave --only auth,firestore \"node --test tests/firebase.test.js\"",
+    "emulators": "firebase emulators:start --project demo-behave --only auth,firestore",
+    "teacher": "node scripts/teacher.mjs"
   },
   "dependencies": {
+    "firebase": "^12.19.0",
     "framer-motion": "^11.2.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@vitejs/plugin-react": "^4.3.1",
+    "firebase-admin": "^14.4.0",
+    "firebase-tools": "^15.30.0",
     "vite": "^5.4.0"
   }
 }

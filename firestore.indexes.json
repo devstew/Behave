@@ -1,0 +1,7 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "workspaces", "fieldPath": "pupils", "indexes": [] },
+    { "collectionGroup": "workspaces", "fieldPath": "previousWeekPupils", "indexes": [] }
+  ]
+}

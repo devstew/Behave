@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function isApprovedTeacher(uid) {
+      return isOwner(uid)
+        && exists(/databases/$(database)/documents/teachers/$(uid))
+        && get(/databases/$(database)/documents/teachers/$(uid)).data.active == true
+        && request.auth.token.email == get(/databases/$(database)/documents/teachers/$(uid)).data.username + '@teachers.behave.invalid';
+    }
+    function validWorkspace() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['schemaVersion', 'pupils', 'previousWeekPupils', 'weekKey', 'previousWeekKey', 'legacyImported', 'updatedAt'])
+        && data.keys().hasOnly(['schemaVersion', 'pupils', 'previousWeekPupils', 'weekKey', 'previousWeekKey', 'legacyImported', 'updatedAt'])
+        && data.schemaVersion == 1
+        && data.pupils is list && data.pupils.size() <= 300
+        && data.previousWeekPupils is list && data.previousWeekPupils.size() <= 300
+        && data.weekKey is string && data.weekKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.previousWeekKey is string
+        && (data.previousWeekKey == '' || data.previousWeekKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+        && data.legacyImported is bool
+        && data.updatedAt == request.time;
+    }
+    match /teachers/{uid} {
+      // Approval documents are provisioned using the Admin SDK or console only.
+      allow get: if isOwner(uid);
+      allow list, create, update, delete: if false;
+    }
+    match /workspaces/{uid} {
+      allow get: if isApprovedTeacher(uid);
+      allow create: if isApprovedTeacher(uid) && validWorkspace();
+      allow update: if isApprovedTeacher(uid) && validWorkspace()
+        && (!resource.data.legacyImported || request.resource.data.legacyImported);
+      allow list, delete: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

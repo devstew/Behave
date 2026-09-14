@@ -10,6 +10,28 @@
   --shadow: 0 20px 40px rgba(176, 50, 50, 0.2);
 }
 
+button, input, textarea { font: inherit; }
+button:disabled, fieldset:disabled button { cursor: wait; opacity: 0.65; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.auth-card { width: 100%; max-width: 440px; padding: 30px; background: white; border-radius: 22px; box-shadow: var(--shadow); }
+.auth-card h1 { font-size: 1.4rem; }
+.auth-form { display: grid; gap: 16px; }
+.auth-form label { display: grid; gap: 8px; font-weight: 600; }
+.auth-form input { width: 100%; min-width: 0; border: 2px solid #f4b5ad; border-radius: 12px; padding: 12px; }
+.auth-submit { background: var(--accent); color: white; border: none; border-radius: 12px; padding: 13px; cursor: pointer; font-weight: 600; }
+.auth-help { font-size: 0.88rem; line-height: 1.6; }
+.teacher-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; }
+.teacher-bar small { opacity: 0.7; }
+.cloud-status { font-size: 0.9rem; }
+.cloud-error { background: #fff0ee; border: 1px solid var(--accent); border-radius: 12px; padding: 12px; line-height: 1.5; }
+.cloud-controls { display: grid; gap: 24px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.import-banner { padding: 16px; background: white; border-radius: 16px; border: 2px solid #f4b5ad; }
+.file-import { display: grid; gap: 8px; margin-top: 16px; }
+.file-import input { max-width: 100%; }
+.note-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 8px; }
+.note-actions span { font-size: 0.8rem; }
+
 * {
   box-sizing: border-box;
 }

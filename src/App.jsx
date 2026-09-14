@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-
-const STORAGE_KEY = "behave:pupils";
-const LAST_WEEK_RESET_KEY = "behave:lastWeekReset";
-const PREV_WEEK_SNAPSHOT_KEY = "behave:prevWeekPupils";
-const DEFAULT_PUPILS = [
-  { id: crypto.randomUUID(), name: "Оля", warnings: 0, history: {}, note: "" },
-  { id: crypto.randomUUID(), name: "Максим", warnings: 0, history: {}, note: "" }
-];
+import { signOut } from "firebase/auth";
+import TeacherAuth, { ChangePassword } from "./TeacherAuth.jsx";
+import { auth, firebaseErrorMessage } from "./firebase.js";
+import { useSchoolDate, useWorkspace } from "./useWorkspace.js";
+import {
+  getDateKey, getWeekdays, SCHOOL_TIME_ZONE, readLegacyWorkspace,
+  readBackupWorkspace, importLegacyWorkspace, updatePupilWarnings
+} from "./workspace.js";
 const DEV_SETTINGS_KEY = "behave:dev-settings";
 const DEFAULT_DEV_SETTINGS = {
   copy: true,
@@ -26,57 +26,6 @@ function loadDevSettings() {
   }
 }
 
-function getDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getCurrentMondayKey() {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(d);
-  monday.setDate(diff);
-  return getDateKey(monday);
-}
-
-function mondayReset(pupils) {
-  if (typeof window === "undefined") return pupils;
-  const thisMonday = getCurrentMondayKey();
-  const lastReset = localStorage.getItem(LAST_WEEK_RESET_KEY);
-  if (lastReset === thisMonday) return pupils;
-  try {
-    localStorage.setItem(LAST_WEEK_RESET_KEY, thisMonday);
-    if (pupils.length > 0) {
-      localStorage.setItem(PREV_WEEK_SNAPSHOT_KEY, JSON.stringify(pupils));
-    }
-  } catch {
-    // ignore
-  }
-  return pupils.map((p) => ({ ...p, warnings: 0 }));
-}
-
-function getWeekdays() {
-  const days = [];
-  const today = new Date();
-  const monday = new Date(today);
-  const offset = (today.getDay() + 6) % 7; // 0 -> Mon
-  monday.setDate(today.getDate() - offset);
-  for (let i = 0; i < 5; i += 1) {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + i);
-    days.push({
-      key: getDateKey(date),
-      label: new Intl.DateTimeFormat("uk-UA", { weekday: "short" }).format(
-        date
-      )
-    });
-  }
-  return days;
-}
-
 function buildSparklinePoints(values, width = 120, height = 28, padding = 2) {
   const max = Math.max(...values, 1);
   const min = Math.min(...values, 0);
@@ -92,27 +41,20 @@ function buildSparklinePoints(values, width = 120, height = 28, padding = 2) {
     .join(" ");
 }
 
-function loadPupils() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_PUPILS;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return DEFAULT_PUPILS;
-    return parsed.map((pupil) => ({
-      ...pupil,
-      history: pupil.history ?? {},
-      note: pupil.note ?? ""
-    }));
-  } catch {
-    return DEFAULT_PUPILS;
-  }
+export default function App() {
+  return <TeacherAuth>{(user, profile) => <TeacherApp key={user.uid} user={user} profile={profile} />}</TeacherAuth>;
 }
 
-export default function App() {
-  const [pupils, setPupils] = useState([]);
+function TeacherApp({ user, profile }) {
+  const todayKey = useSchoolDate();
+  const { workspace, saving, offline, connected, error, setError, write } = useWorkspace(user.uid, todayKey);
+  const pupils = workspace?.pupils ?? [];
   const [name, setName] = useState("");
-  const [showLoader, setShowLoader] = useState(true);
-  const [isHydrated, setIsHydrated] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [noteDrafts, setNoteDrafts] = useState({});
+  const [legacyAvailable, setLegacyAvailable] = useState(() => {
+    try { return Boolean(localStorage.getItem("behave:pupils")); } catch { return false; }
+  });
   const [sortMode, setSortMode] = useState("name");
   const [warningsSortDesc, setWarningsSortDesc] = useState(true);
   const [showWinnersOnly, setShowWinnersOnly] = useState(false);
@@ -127,18 +69,53 @@ export default function App() {
   const [tremorId, setTremorId] = useState(null);
   const [openNotes, setOpenNotes] = useState({});
 
+  const hasDrafts = Object.keys(noteDrafts).length > 0;
   useEffect(() => {
-    const loaded = loadPupils();
-    setPupils(mondayReset(loaded));
-    const timer = setTimeout(() => setShowLoader(false), 1200);
-    setIsHydrated(true);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!workspace) return;
+    const ids = new Set(workspace.pupils.map((pupil) => pupil.id));
+    setNoteDrafts((current) => Object.keys(current).some((id) => !ids.has(id))
+      ? Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id))) : current);
+  }, [workspace]);
+  useEffect(() => {
+    if (!hasDrafts && !saving) return;
+    const warn = (event) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasDrafts, saving]);
 
-  useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pupils));
-  }, [pupils, isHydrated]);
+  async function logout() {
+    if (hasDrafts) { setError("Збережіть або скасуйте зміни нотаток перед виходом."); return; }
+    try { await signOut(auth); } catch (failure) { setError(firebaseErrorMessage(failure)); }
+  }
+
+  async function handleLegacyImport() {
+    try {
+      const legacy = readLegacyWorkspace(localStorage);
+      if (!legacy) throw new Error("У цьому браузері немає даних для імпорту.");
+      if (await write((current) => importLegacyWorkspace(current, legacy))) setLegacyAvailable(false);
+    } catch (failure) { setError(firebaseErrorMessage(failure)); }
+  }
+
+  async function handleFileImport(event) {
+    const file = event.target.files[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error("Файл завеликий. Максимальний розмір файлу: 5 МБ.");
+      const imported = readBackupWorkspace(JSON.parse(await file.text()));
+      await write((current) => importLegacyWorkspace(current, imported));
+    } catch (failure) { setError(firebaseErrorMessage(failure)); }
+  }
+
+  function handleDownloadData() {
+    const { updatedAt, ...backup } = workspace;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `behave-${profile.username}-${todayKey}.json`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -156,24 +133,23 @@ export default function App() {
 
   const todayLabel = useMemo(
     () =>
-      new Intl.DateTimeFormat("uk-UA", { weekday: "long" }).format(new Date()),
-    []
+      new Intl.DateTimeFormat("uk-UA", { weekday: "long", timeZone: "UTC" }).format(new Date(`${todayKey}T12:00:00Z`)),
+    [todayKey]
   );
   const todayDateLabel = useMemo(
     () =>
       new Intl.DateTimeFormat("uk-UA", {
         day: "numeric",
         month: "long",
-        year: "numeric"
-      }).format(new Date()),
-    []
+        year: "numeric", timeZone: SCHOOL_TIME_ZONE
+      }).format(new Date(`${todayKey}T12:00:00Z`)),
+    [todayKey]
   );
 
-  const lastWeekdays = useMemo(() => getWeekdays(), []);
-  const todayDay = useMemo(() => new Date().getDay(), []);
+  const lastWeekdays = useMemo(() => getWeekdays(todayKey), [todayKey]);
+  const todayDay = new Date(`${todayKey}T12:00:00Z`).getUTCDay();
   const fakeFriday = devSettings.fakeFriday ?? false;
   const effectiveDay = fakeFriday ? 5 : todayDay;
-  const todayKey = useMemo(() => getDateKey(), []);
 
   const visiblePupils = useMemo(() => {
     const filteredByWarnings = showWinnersOnly
@@ -209,35 +185,27 @@ export default function App() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [fullMatchPupil?.id]);
 
-  function handleAdd(event) {
+  async function handleAdd(event) {
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    setPupils((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        name: trimmed,
-        warnings: 0,
-        history: {},
-        note: ""
-      }
-    ]);
-    setName("");
+    const pupil = { id: crypto.randomUUID(), name: trimmed, warnings: 0, history: {}, note: "" };
+    if (await write((current) => ({ ...current, pupils: [...current.pupils, pupil] }))) setName("");
   }
 
-  function handleDelete(id) {
-    setPupils((prev) => prev.filter((pupil) => pupil.id !== id));
+  async function handleDelete(id) {
+    const result = await write((current) => ({ ...current, pupils: current.pupils.filter((pupil) => pupil.id !== id) }));
+    if (result) setNoteDrafts((current) => { const next = { ...current }; delete next[id]; return next; });
+    return result;
   }
 
   function startDelete(pupil) {
     setPendingDelete(pupil);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!pendingDelete) return;
-    handleDelete(pendingDelete.id);
-    setPendingDelete(null);
+    if (await handleDelete(pendingDelete.id)) setPendingDelete(null);
   }
 
   function cancelDelete() {
@@ -254,38 +222,17 @@ export default function App() {
     setEditingName("");
   }
 
-  function saveEdit(id) {
+  async function saveEdit(id) {
     const trimmed = editingName.trim();
     if (!trimmed) return;
-    setPupils((prev) =>
-      prev.map((pupil) =>
+    if (await write((current) => ({ ...current, pupils: current.pupils.map((pupil) =>
         pupil.id === id ? { ...pupil, name: trimmed } : pupil
-      )
-    );
-    cancelEdit();
+      ) }))) cancelEdit();
   }
 
   function updateWarnings(id, delta) {
-    setPupils((prev) =>
-      prev.map((pupil) =>
-        pupil.id === id
-          ? (() => {
-              const nextWarnings = Math.max(0, pupil.warnings + delta);
-              const dateKey = getDateKey();
-              const history = pupil.history ?? {};
-              const nextHistoryValue = Math.max(
-                0,
-                (history[dateKey] ?? 0) + delta
-              );
-              return {
-                ...pupil,
-                warnings: nextWarnings,
-                history: { ...history, [dateKey]: nextHistoryValue }
-              };
-            })()
-          : pupil
-      )
-    );
+    const key = getDateKey();
+    void write((current) => updatePupilWarnings(current, id, delta, key));
   }
 
   async function handleCopyData() {
@@ -300,6 +247,9 @@ export default function App() {
   }
 
   function buildSnapshotHtml(pupilList, title, dateLabel) {
+    const escape = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[character]));
     return `
       <html>
         <head>
@@ -325,7 +275,7 @@ export default function App() {
               (pupil) => `
                 <div class="card">
                   <div class="row">
-                    <strong>${pupil.name}</strong>
+                    <strong>${escape(pupil.name)}</strong>
                     <span class="pill">Зауважень: ${pupil.warnings}</span>
                   </div>
                 </div>
@@ -352,17 +302,10 @@ export default function App() {
   }
 
   function handleSnapshotPrevWeek() {
-    let prevPupils = [];
-    try {
-      const raw = localStorage.getItem(PREV_WEEK_SNAPSHOT_KEY);
-      if (raw) prevPupils = JSON.parse(raw);
-      if (!Array.isArray(prevPupils)) prevPupils = [];
-    } catch {
-      prevPupils = [];
-    }
+    const prevPupils = workspace.previousWeekPupils;
     const dateLabel =
       prevPupils.length > 0
-        ? "Минулий тиждень (збережено при скиданні)"
+        ? `Тиждень від ${workspace.previousWeekKey}`
         : "Немає даних минулого тижня";
     const html = buildSnapshotHtml(
       prevPupils,
@@ -386,16 +329,14 @@ export default function App() {
   }
 
   function fillMockHistory() {
-    setPupils((prev) =>
-      prev.map((pupil) => {
+    // Generate once outside the transaction callback, which Firestore may retry.
+    const values = lastWeekdays.map((day) => [day.key, Math.floor(Math.random() * 3)]);
+    void write((current) => ({ ...current, pupils: current.pupils.map((pupil) => {
         const history = { ...pupil.history };
-        lastWeekdays.forEach((day) => {
-          history[day.key] = Math.floor(Math.random() * 3); // 0–2
-        });
+        values.forEach(([key, value]) => { history[key] = value; });
         const todaysValue = history[todayKey] ?? 0;
         return { ...pupil, history, warnings: todaysValue };
-      })
-    );
+      }) }));
   }
 
   function triggerBurst(pupilId, warnings, allow) {
@@ -420,11 +361,19 @@ export default function App() {
   }
 
   function handleNoteChange(id, value) {
-    setPupils((prev) =>
-      prev.map((pupil) =>
-        pupil.id === id ? { ...pupil, note: value } : pupil
-      )
-    );
+    setNoteDrafts((current) => ({ ...current, [id]: value }));
+  }
+
+  function cancelNote(id) {
+    setNoteDrafts((current) => { const next = { ...current }; delete next[id]; return next; });
+  }
+
+  async function saveNote(id) {
+    const note = noteDrafts[id];
+    if (note === undefined) return;
+    if (await write((current) => ({ ...current, pupils: current.pupils.map((pupil) =>
+      pupil.id === id ? { ...pupil, note } : pupil
+    ) }))) cancelNote(id);
   }
 
   const showCopyControls = devSettings.copy;
@@ -434,16 +383,31 @@ export default function App() {
 
   const zeroWarningCount = pupils.filter((pupil) => pupil.warnings === 0).length;
 
+  if (!workspace) return <main className="auth-page"><section className="auth-card">
+    <div className="page-title">Behave 🍎</div>
+    <p role="status">{offline ? "Для завантаження потрібен інтернет." : "Завантажуємо ваші дані…"}</p>
+    {error && <p role="alert" className="cloud-error">{error}</p>}
+    <button className="snapshot-btn" onClick={() => window.location.reload()}>Спробувати знову</button>
+    <button className="snapshot-btn" disabled={saving} onClick={logout}>Вийти</button>
+  </section></main>;
+
   return (
     <div className="page">
-      {showLoader && (
-        <div className="loader">
-          <div className="loader-card">
-            <div className="loader-icon">🌟</div>
-            <div className="loader-title">Behave</div>
-          </div>
+      <div className="teacher-bar">
+        <span>🍎 {profile.displayName || profile.username} <small>({profile.username})</small></span>
+        <div className="control-actions">
+          <button className="snapshot-btn" onClick={() => setPasswordOpen(true)} disabled={saving}>Змінити пароль</button>
+          <button className="snapshot-btn" onClick={logout} disabled={saving}>Вийти</button>
         </div>
-      )}
+      </div>
+      <div role="status" className="cloud-status">{offline ? "Немає інтернету — зміни недоступні." : saving ? "Зберігаємо…" : !connected ? "Під’єднуємося до сховища…" : "Дані збережені у хмарі ✓"}</div>
+      {error && <div role="alert" className="cloud-error">{error} <button type="button" onClick={() => window.location.reload()}>Перезавантажити</button></div>}
+      <fieldset className="cloud-controls" disabled={saving || offline || !connected}>
+      {!workspace.pupils.length && !workspace.legacyImported && <section className="import-banner">
+        <p>Можна імпортувати попередні дані в обліковий запис <strong>{profile.username}</strong>. Перевірте, що вони належать цьому вчителю.</p>
+        {legacyAvailable && <button type="button" className="snapshot-btn" onClick={handleLegacyImport}>Імпортувати з цього браузера</button>}
+        <label className="file-import">Імпортувати JSON-файл<input type="file" accept=".json,application/json" onChange={handleFileImport} /></label>
+      </section>}
 
       <div className="above-fold">
         <div className="page-header">
@@ -506,6 +470,7 @@ export default function App() {
         <form className="add-form" onSubmit={handleAdd}>
           <input
             className="name-input"
+            maxLength={120}
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Додати ім'я учня"
@@ -563,6 +528,7 @@ export default function App() {
             Тільки переможці без зауважень 🏆
           </label>
           <div className="control-actions">
+            <button className="snapshot-btn" type="button" onClick={handleDownloadData}>Завантажити резервну копію</button>
             <button
               className="snapshot-btn"
               type="button"
@@ -673,6 +639,7 @@ export default function App() {
                   <div className="edit-row">
                         <input
                           className="edit-input"
+                          maxLength={120}
                           value={editingName}
                           onChange={(event) => setEditingName(event.target.value)}
                           aria-label="Нове ім'я учня"
@@ -725,11 +692,18 @@ export default function App() {
                   {openNotes[pupil.id] && (
                     <textarea
                       className="note-input"
-                      value={pupil.note ?? ""}
+                      aria-label={`Нотатка: ${pupil.name}`}
+                      maxLength={4000}
+                      value={noteDrafts[pupil.id] ?? pupil.note ?? ""}
                       onChange={(e) => handleNoteChange(pupil.id, e.target.value)}
                       placeholder="Запишіть нотатку про учня"
                     />
                   )}
+                  {noteDrafts[pupil.id] !== undefined && <div className="note-actions">
+                    <span>Є незбережені зміни</span>
+                    <button className="snapshot-btn" type="button" onClick={() => saveNote(pupil.id)}>Зберегти нотатку</button>
+                    <button className="snapshot-btn" type="button" onClick={() => cancelNote(pupil.id)}>Скасувати</button>
+                  </div>}
                 </div>
               </div>
             <div className="pupil-bottom-row">
@@ -815,6 +789,7 @@ export default function App() {
               Ви точно хочете видалити{" "}
               <strong>{pendingDelete.name}</strong> з класу?
             </div>
+            {error && <p role="alert" className="cloud-error">{error}</p>}
             <div className="modal-actions">
               <button
                 className="modal-btn modal-cancel"
@@ -923,6 +898,8 @@ export default function App() {
           </div>
         </div>
       )}
+      </fieldset>
+      {passwordOpen && <ChangePassword user={user} onClose={() => setPasswordOpen(false)} />}
     </div>
   );
 }

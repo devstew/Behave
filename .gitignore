@@ -2,3 +2,10 @@ node_modules
 .DS_Store
 dist
 .env
+.env.*
+!.env.example
+.firebase
+*-debug.log
+*-service-account*.json
+service-account.json
+*firebase-adminsdk*.json
